@@ -14,7 +14,7 @@ def download_carla_data():
     import tarfile
     import urllib
 
-    url = 'http://ftp.gnu.org/gnu/gzip/gzip-1.6.tar.gz'
+    url = 'https://github.com/m-smith/carla_env/raw/carla_dist/carla_dist.tar.gz'
 
     file_tmp = urllib.request.urlretrieve(url, filename=None)[0]
     base_name = os.path.basename(url)
