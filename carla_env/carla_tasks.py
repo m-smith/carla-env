@@ -8,7 +8,7 @@ __all__ = [
 import numpy as np
 import gym
 
-from sorl.envs.carla_env.carla_env import CarlaEnv
+from carla_env.carla_env import CarlaEnv
 
 def run_carla_env(env):
     env = gym.wrappers.Monitor(env(), "./env_logs", force=True)

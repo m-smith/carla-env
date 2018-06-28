@@ -100,7 +100,7 @@ class CarlaEnv(gym.Env):
         print(f"Connecting to CARLA Client on  port {self.port}")
         self.client = CarlaClient(self.host, self.port, timeout=99999999)
         time.sleep(3)
-        self.client.connect()
+        self.client.connect(connection_attempts=100)
         print(f"Connected on port: {self.port}")
         
         self.action_space = gym.spaces.Box(-2, 2,
