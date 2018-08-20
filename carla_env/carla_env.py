@@ -14,15 +14,29 @@ def download_carla_data():
     import tarfile
     import urllib
 
-    url = 'https://github.com/m-smith/carla_env/raw/carla_dist/carla_dist.tar.gz'
+    def reporthook(blocknum, blocksize, totalsize):
+        readsofar = blocknum * blocksize
+        if totalsize > 0:
+            percent = readsofar * 1e2 / totalsize
+            s = "\r%5.1f%% %*d / %d" % (
+                percent, len(str(totalsize)), readsofar, totalsize)
+            sys.stderr.write(s)
+            if readsofar >= totalsize: # near the end
+                sys.stderr.write("\n")
+        else: # total size is unknown
+            sys.stderr.write("read %d\n" % (readsofar,))
 
-    file_tmp = urllib.request.urlretrieve(url, filename=None)[0]
+    url = 'https://github.com/m-smith/carla-env/releases/download/v0.1/carla_dist.tar.gz'
+
+    file_tmp = urllib.request.urlretrieve(url, filename=None, reporthook=reporthook)[0]
     base_name = os.path.basename(url)
 
     file_name, file_extension = os.path.splitext(base_name)
-    tar = tarfile.open(file_tmp)
-    tar.extractall(CARLA_PATH)
 
+    print("Extracting...This may also take some time...")
+    tar = tarfile.open(file_tmp)
+    tar.extractall(os.path.dirname(__file__))
+    print("Done.")
 
 if not os.path.exists(CARLA_PATH):
     print("Downloading CARLA Environment. This may take some time.")
