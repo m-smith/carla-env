@@ -40,8 +40,9 @@ class CarlaLaneFollowEnv(CarlaEnv):
 
         off_lane = measurements.player_measurements.intersection_otherlane
 
-        reward += (1 - off_lane) * (300 - self.dist_from_goal(measurements))
+        reward += (1 - off_lane) * (30)
         is_done = is_done or off_lane > 0.7
+        reward = reward / 20
         return reward, is_done
 
 class CarlaLaneFollowCarEnv(CarlaLaneFollowEnv):

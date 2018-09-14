@@ -1,6 +1,7 @@
 import sys
 import os
 import signal
+import stat
 import subprocess
 import time
 
@@ -114,7 +115,7 @@ class CarlaEnv(gym.Env):
         print(f"Connecting to CARLA Client on  port {self.port}")
         self.client = CarlaClient(self.host, self.port, timeout=99999999)
         time.sleep(3)
-        self.client.connect(connection_attempts=100)
+        self.client.connect(connection_attempts=1000)
         print(f"Connected on port: {self.port}")
         
         self.action_space = gym.spaces.Box(-2, 2,
@@ -134,18 +135,50 @@ class CarlaEnv(gym.Env):
 
 
     def open_server(self):
-        with open(os.devnull, "wb") as out:
-            cmd = [os.path.join(CARLA_PATH, 'CarlaUE4.sh'),
-                                "-carla-server", "-fps=100", "-world-port={}".format(self.port),
-                                "-windowed -ResX={} -ResY={}".format(500, 500),
+        #os.devnull
+        log_file = f"./logs/carla_logs/carla_{self.port}.txt"
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        with open(log_file, "wb+") as out:
+            """
+            true_script_name = os.path.join(CARLA_PATH, 'CarlaUE4.sh')
+            if os.path.islink(true_script_name):
+                true_script_name = os.readlink(execute_path)
+            project_root = os.path.dirname(true_script_name)
+            execute_path = f"{project_root}/CarlaUE4/Binaries/Linux/CarlaUE4"
+            
+            # chmod +x
+            st = os.stat(execute_path)
+            os.chmod(execute_path, st.st_mode | stat.S_IEXEC)
+            """
+            cmd = [os.path.join(CARLA_PATH, 'CarlaUE4.sh'), #execute_path, "CarlaUE4",
+                                "-carla-server", "-fps=60",
+                                f"-world-port={self.port}",
+                                f"-windowed -ResX={500} -ResY={500}",
                                 "-carla-no-hud"]
             # - benchmark
-            p = subprocess.Popen(cmd, stdout=out, stderr=out)
+            p = subprocess.Popen(cmd, stdout=out, stderr=out, stdin=subprocess.PIPE, preexec_fn=os.setpgrp)
 
         return p
 
     def close_server(self):
-        self.server.terminate()
+        #self.server.terminate()
+        pid = self.server.pid
+        no_of_attempts = 0
+        def is_process_alive(pid):
+            ## Source: https://stackoverflow.com/questions/568271/how-to-check-if-there-exists-a-process-with-a-given-pid-in-python
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return False
+            return True
+
+        while is_process_alive(pid):
+            pgroup = os.getpgid(self.server.pid)
+            self.server.terminate()
+            os.killpg(pgroup, signal.SIGTERM)
+            _,_ = os.waitpid(pid, os.WNOHANG) 
+            time.sleep(5)
+
 
     def _add_settings(self):
 
@@ -200,8 +233,9 @@ class CarlaEnv(gym.Env):
 
         distance_reward = 300 - dist_from_goal
         collision_cost = collision_penalty / 300
-        offroad_cost = (offroad_penalty * 10) ** 2
+        offroad_cost = (offroad_penalty * 10)
         reward = distance_reward - collision_cost - offroad_cost
+        reward = reward / 20
 
         return reward, is_done
 
@@ -226,15 +260,33 @@ class CarlaEnv(gym.Env):
         start, goal = self.get_new_start_goal()
 
         self.goal = goal
-        self.client.start_episode(start)
 
-        self.current_state = self.client.read_data()
+        for i in range(100):
+            try:
+                self.client.start_episode(start)
+                self.current_state = self.client.read_data()
+                if i > 0:
+                    print("Reconnected.")
+                break
+            except carla.tcp.TCPConnectionError:
+                if i % 10 == 0:
+                    print(f"There was a TCP Error (Attempt {i}). Retrying. ")
+                time.sleep(3)
+
+
+        
         measurements, sensor_data = self.current_state
         return self._process_observation(measurements, sensor_data)
 
     def step(self, a):
         control = self._map_controls(a)
-        self.client.send_control(**control)
+        for i in range(100):
+            try:
+                self.client.send_control(**control)
+                break
+            except carla.tcp.TCPConnectionError:
+                time.sleep(0.5)
+
         self.current_state = self.client.read_data()
         measurements, sensor_data = self.current_state
         
@@ -249,11 +301,16 @@ class CarlaEnv(gym.Env):
             return np.concatenate([sensor.data for name, sensor in self.current_state[1].items() if "Render" in name], axis=1)
         super().render(mode=mode, **kwargs)
 
+    def _close(self):
+        self.close()
+
     def close(self):
-        print(f"Disconnecting from CARLA Client (port: {self.port})")
-        self.client.disconnect()
+        print(f"Disconnecting from CARLA Client (port: {self.port}, pid: {self.server.pid})")
         self.close_server()
-        print("Disconnected.")
+        time.sleep(3)
+        while self.client.connected():
+            self.client.disconnect()
+        print(f"Disconnected from CARLA Client (port: {self.port}, pid: {self.server.pid}).")
 
 
 if __name__ == "__main__":
