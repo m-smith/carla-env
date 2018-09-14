@@ -1,7 +1,7 @@
 
 
 
-# `carla-env`: an OpenAI gym wrapper for simple custom CARLA tasks
+# An OpenAI gym wrapper for simple custom CARLA tasks
 
 In order to perform RL research in the CARLA simulator with code that abstracts over environments, we
 implement a self-contained set of CARLA tasks which implement the OpenAI gym environment API.
